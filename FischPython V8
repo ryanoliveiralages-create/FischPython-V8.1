@@ -1,0 +1,2008 @@
+import sys
+import random
+import os
+import math
+import json
+
+# Configurações do Pygame
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1"
+
+try:
+    import pygame
+    pygame.init()
+    pygame.font.init()
+except Exception as e:
+    print(f"Erro ao inicializar Pygame: {e}")
+    sys.exit(1)
+
+SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 720
+WORLD_WIDTH, WORLD_HEIGHT = 5400, 4000  # Aumentado o WORLD_WIDTH para caber o novo espaçamento
+FPS = 30  # FPS mantido em 30 quadros por segundo
+
+try:
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED)
+except Exception:
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+pygame.display.set_caption("Python Fisch v6.8 - Skull & Abyss Update")
+clock = pygame.time.Clock()
+
+SAVE_FILE = "fisch_save.json"
+
+# Paleta de Cores
+COLOR_OCEAN = (15, 75, 130)
+COLOR_GRASS = (34, 139, 34)
+COLOR_SAND = (222, 184, 135)
+COLOR_ROCK_ISLAND = (100, 100, 105)
+COLOR_ROCK_DARK = (60, 60, 65)
+COLOR_CRYSTAL_ISLAND = (45, 20, 70)
+COLOR_CRYSTAL_GLOW = (180, 100, 255)
+COLOR_ABYSS_ISLAND = (15, 15, 25)
+COLOR_ABYSS_WATER = (5, 5, 15)
+COLOR_SKULL_ISLAND = (40, 35, 45)
+COLOR_SKULL_BORDER = (120, 30, 30)
+
+WHITE = (255, 255, 255)
+BLACK = (15, 15, 15)
+GRAY = (120, 120, 120)
+DARK_GRAY = (35, 35, 45)
+GOLD = (241, 196, 15)
+YELLOW = (255, 235, 59)
+CYAN = (0, 230, 240)
+PURPLE = (155, 89, 182)
+GREEN = (46, 204, 113)
+RED = (231, 76, 60)
+ORANGE = (230, 126, 34)
+
+# Cor Especial da Raridade Divina
+COLOR_DIVINE_FISH = (8, 168, 163)
+
+# Fontes do Sistema
+font_xs = pygame.font.SysFont(None, 20)
+font_small = pygame.font.SysFont(None, 24)
+font_medium = pygame.font.SysFont(None, 30)
+font_large = pygame.font.SysFont(None, 38)
+font_title = pygame.font.SysFont(None, 48)
+
+# Configuração dos Climas
+WEATHER_TYPES = {
+    "Ensolarado": {
+        "name": "Ensolarado",
+        "luck_mult": 1.0,
+        "color": YELLOW,
+        "overlay": None
+    },
+    "Chuvoso": {
+        "name": "Chuvoso",
+        "luck_mult": 1.3,
+        "color": (52, 152, 219),
+        "overlay": None
+    },
+    "Neblina": {
+        "name": "Neblina",
+        "luck_mult": 1.25,
+        "color": (180, 180, 200),
+        "overlay": None
+    },
+    "Tempestade": {
+        "name": "Tempestade",
+        "luck_mult": 1.8,
+        "color": PURPLE,
+        "overlay": None
+    },
+    "Eclipse": {
+        "name": "Eclipse",
+        "luck_mult": 5.0,
+        "color": RED,
+        "overlay": None
+    }
+}
+
+FISH_RARITY_INFO = {
+    "Comum": {"chance": 42, "speed": 3.0, "price": 10, "xp": 40, "color": (190, 190, 190)},
+    "Incomum": {"chance": 26, "speed": 4.2, "price": 25, "xp": 95, "color": GREEN},
+    "Raro": {"chance": 16, "speed": 5.5, "price": 70, "xp": 220, "color": (52, 152, 219)},
+    "Épico": {"chance": 9, "speed": 7.0, "price": 180, "xp": 550, "color": PURPLE},
+    "Lendário": {"chance": 4, "speed": 8.8, "price": 500, "xp": 1600, "color": GOLD},
+    "Mítico": {"chance": 2, "speed": 10.5, "price": 1600, "xp": 4500, "color": (233, 30, 99)},
+    "SECRETO": {"chance": 1, "speed": 12.5, "price": 5000, "xp": 15000, "color": RED},
+    "Divina": {"chance": 0, "speed": 13.5, "price": 25000, "xp": 55000, "color": COLOR_DIVINE_FISH}
+}
+
+MASTERLINE_ROD = {
+    "name": "VARA MASTERLINE",
+    "price": 0,
+    "bar_size": 378,
+    "luck": 33.3,
+    "req_level": 100,
+    "progress_mult": 4.0,
+    "instant_bite": True,
+    "resilience": 77,
+    "color": (255, 0, 255),
+    "decor": "masterline"
+}
+
+ISLANDS = {
+    "inicial": {
+        "name": "Ilha Inicial",
+        "rect": pygame.Rect(200, 200, 700, 600),
+        "color": COLOR_GRASS,
+        "border_color": COLOR_SAND,
+        "vendor_npc": pygame.Rect(420, 280, 50, 50),
+        "rod_npc": pygame.Rect(540, 280, 50, 50),
+        "boat_npc": pygame.Rect(660, 280, 50, 50),
+        "money_buff": 1.1,
+        "rods": {
+            "bambu": {
+                "name": "Vara de Bambu", 
+                "price": 0, 
+                "bar_size": 80, 
+                "luck": 1.0, 
+                "req_level": 1,
+                "resilience": 0,
+                "color": (139, 90, 43),
+                "decor": "bambu"
+            },
+            "fibra": {
+                "name": "Vara de Fibra de Vidro", 
+                "price": 665, 
+                "bar_size": 95, 
+                "luck": 1.25, 
+                "req_level": 2,
+                "resilience": 5,
+                "color": (240, 240, 240),
+                "decor": "fibra"
+            },
+            "ouro": {
+                "name": "Vara de Ouro Reluzente", 
+                "price": 3150, 
+                "bar_size": 115, 
+                "luck": 1.6, 
+                "req_level": 4,
+                "resilience": 10,
+                "color": (255, 215, 0),
+                "decor": "ouro"
+            },
+            "mitica": {
+                "name": "Vara Mítica do Mar", 
+                "price": 10500, 
+                "bar_size": 135, 
+                "luck": 2.2, 
+                "req_level": 7,
+                "resilience": 15,
+                "color": (0, 150, 255),
+                "decor": "mitica"
+            }
+        },
+        "lakes": {
+            "Lagoa": {
+                "name": "Lagoa Tranquila", "req_level": 1, "color": (30, 144, 255),
+                "rect": pygame.Rect(260, 420, 220, 180),
+                "fish": {
+                    "Comum": ["Tilápia", "Lambari", "Sardinha"],
+                    "Incomum": ["Carpa Dourada", "Tucunaré"],
+                    "Raro": ["Tambaqui", "Pirarucu"],
+                    "Épico": ["Peixe-Dourado Gigante"],
+                    "Lendário": ["Arowana Anciã"],
+                    "Mítico": ["Guardião da Lagoa"],
+                    "SECRETO": ["Anomalia Fluorescente"]
+                }
+            },
+            "Vulcão": {
+                "name": "Poço Vulcânico", "req_level": 6, "color": (200, 50, 20),
+                "rect": pygame.Rect(580, 420, 220, 180),
+                "fish": {
+                    "Comum": ["Cascudo Magmático"],
+                    "Incomum": ["Peixe-Pedra Incandescente"],
+                    "Raro": ["Salamandra de Fogo"],
+                    "Épico": ["Anguila de Lava"],
+                    "Lendário": ["Fênix Aquática"],
+                    "Mítico": ["Dragão Magmático"],
+                    "SECRETO": ["Coração do Vulcão"]
+                }
+            }
+        }
+    },
+    "pedra": {
+        "name": "Ilha da Pedra",
+        "rect": pygame.Rect(1800, 200, 800, 700),
+        "color": COLOR_ROCK_ISLAND,
+        "border_color": COLOR_ROCK_DARK,
+        "vendor_npc": pygame.Rect(2000, 300, 50, 50),
+        "rod_npc": pygame.Rect(2150, 300, 50, 50),
+        "money_buff": 1.5,
+        "rods": {
+            "granito": {
+                "name": "Vara de Granito Sólido", 
+                "price": 24500, 
+                "bar_size": 140, 
+                "luck": 2.8, 
+                "req_level": 10,
+                "resilience": 20,
+                "color": (120, 120, 130),
+                "decor": "granito"
+            },
+            "basalto": {
+                "name": "Vara de Basalto Vulcânico", 
+                "price": 52500, 
+                "bar_size": 150, 
+                "luck": 3.4, 
+                "req_level": 15,
+                "resilience": 25,
+                "color": (45, 45, 50),
+                "decor": "basalto"
+            }
+        },
+        "lakes": {
+            "BasePedra": {
+                "name": "Lago da Base da Pedra", "req_level": 10, "color": (70, 130, 180),
+                "rect": pygame.Rect(1880, 450, 280, 200),
+                "fish": {
+                    "Comum": ["Cascudo das Pedras", "Carpa Rochosa"],
+                    "Incomum": ["Bagre das Cavernas", "Truta Escondida"],
+                    "Raro": ["Peixe Golem", "Trilobita Fossilizado"],
+                    "Épico": ["Guardião de Granito"],
+                    "Lendário": ["Monolito Aquático"],
+                    "Mítico": ["Sirenita de Pedra"],
+                    "SECRETO": ["Ancestral Geodésico"]
+                }
+            },
+            "PicoPedra": {
+                "name": "Lago Do Pico da Pedra", "req_level": 15, "color": (100, 180, 220),
+                "rect": pygame.Rect(2240, 450, 280, 200),
+                "fish": {
+                    "Comum": ["Truta Montanhesa", "Salmão das Alturas"],
+                    "Incomum": ["Peixe Vento de Pedra"],
+                    "Raro": ["Cristal de Rocha Vivo"],
+                    "Épico": ["Águia dos Mares da Montanha"],
+                    "Lendário": ["Titã dos Picos"],
+                    "Mítico": ["Dragão dos Despenhadeiros"],
+                    "SECRETO": ["Divindade do Cume"]
+                }
+            }
+        }
+    },
+    "cristais": {
+        "name": "Ilha dos Cristais",
+        "rect": pygame.Rect(300, 1800, 850, 750),
+        "color": COLOR_CRYSTAL_ISLAND,
+        "border_color": COLOR_CRYSTAL_GLOW,
+        "vendor_npc": pygame.Rect(500, 1900, 50, 50),
+        "rod_npc": pygame.Rect(650, 1900, 50, 50),
+        "money_buff": 2.2,
+        "rods": {
+            "prismatica": {
+                "name": "Vara Prismática Radiante", 
+                "price": 126000, 
+                "bar_size": 160, 
+                "luck": 4.2, 
+                "req_level": 20,
+                "resilience": 40,
+                "color": (255, 105, 180),
+                "decor": "prismatica"
+            },
+            "nucleo_cristal": {
+                "name": "Vara Núcleo de Cristal", 
+                "price": 280000, 
+                "bar_size": 175, 
+                "luck": 5.2, 
+                "req_level": 25,
+                "resilience": 20,
+                "color": (148, 0, 211),
+                "decor": "nucleo_cristal"
+            }
+        },
+        "lakes": {
+            "LagoCalmo": {
+                "name": "Lago Calmo", "req_level": 20, "color": (120, 220, 230),
+                "rect": pygame.Rect(380, 2080, 300, 220),
+                "fish": {
+                    "Comum": ["Peixe Esmeralda", "Quartzo Rosa Natante"],
+                    "Incomum": ["Safira Aquática"],
+                    "Raro": ["Lotus de Cristal Bioluminescente"],
+                    "Épico": ["Arraia Prismática"],
+                    "Lendário": ["Dragão de Cristal Calmo"],
+                    "Mítico": ["Serafim de Ametista"],
+                    "SECRETO": ["Singularidade Prismática"]
+                }
+            },
+            "LagoCristalizado": {
+                "name": "Lago Cristalizado", "req_level": 25, "color": (200, 130, 255),
+                "rect": pygame.Rect(740, 2080, 300, 220),
+                "fish": {
+                    "Comum": ["Diamante Bruto Nadador"],
+                    "Incomum": ["Peixe Espelho Multifacetado"],
+                    "Raro": ["Espectro Diamantado"],
+                    "Épico": ["Quimera de Cristal"],
+                    "Lendário": ["Lorde dos Cristais"],
+                    "Mítico": ["Fênix de Diamante"],
+                    "SECRETO": ["O Coração Prisma"]
+                }
+            }
+        }
+    },
+    "marianas": {
+        "name": "Ilha Fossa das Marianas",
+        "rect": pygame.Rect(2000, 1800, 950, 850),
+        "color": COLOR_ABYSS_ISLAND,
+        "border_color": (50, 50, 100),
+        "vendor_npc": pygame.Rect(2200, 1900, 50, 50),
+        "rod_npc": pygame.Rect(2350, 1900, 50, 50),
+        "money_buff": 3.2,
+        "rods": {
+            "sombra_abissal": {
+                "name": "Vara das Sombras Abissais", 
+                "price": 378000,  # Reduzido em 40% (de 630000)
+                "bar_size": 190, 
+                "luck": 6.8, 
+                "req_level": 30,
+                "resilience": 30,
+                "color": (20, 20, 35),
+                "decor": "sombra_abissal"
+            },
+            "vazio_hadal": {
+                "name": "Vara do Vazio Hadal", 
+                "price": 1050000,  # Reduzido em 40% (de 1750000)
+                "bar_size": 210, 
+                "luck": 7.5,
+                "req_level": 40,
+                "resilience": 45,
+                "color": (10, 0, 20),
+                "decor": "vazio_hadal"
+            }
+        },
+        "lakes": {
+            "LagoAbyssal": {
+                "name": "Lago Abyssal", "req_level": 30, "color": (15, 30, 60),
+                "rect": pygame.Rect(2080, 2100, 340, 250),
+                "fish": {
+                    "Comum": ["Peixe Lanterninha Abissal"],
+                    "Incomum": ["Enguia das Sombras"],
+                    "Raro": ["Lula Colossal Abissal"],
+                    "Épico": ["Devorador de Luz"],
+                    "Lendário": ["Leviatã da Penumbra"],
+                    "Mítico": ["Behemoth Abissal"],
+                    "SECRETO": ["O Espírito do Abismo"]
+                }
+            },
+            "LagoHadal": {
+                "name": "Lago Hadal", "req_level": 40, "color": COLOR_ABYSS_WATER,
+                "rect": pygame.Rect(2500, 2100, 340, 250),
+                "fish": {
+                    "Comum": ["Peixe Escuridão Hadal"],
+                    "Incomum": ["Anglerfish Ancestral"],
+                    "Raro": ["Hidra das Profundezas Hadais"],
+                    "Épico": ["Kraken Sem Fim"],
+                    "Lendário": ["Titã do Vazio Hadal"],
+                    "Mítico": ["Sultão das Trevas Aquáticas"],
+                    "SECRETO": ["A Singularidade Hadal"]
+                }
+            }
+        }
+    },
+    "caveira": {
+        "name": "Ilha da Caveira",
+        "rect": pygame.Rect(4000, 1800, 950, 850),
+        "color": COLOR_SKULL_ISLAND,
+        "border_color": COLOR_SKULL_BORDER,
+        "vendor_npc": pygame.Rect(4200, 1900, 50, 50),
+        "rod_npc": pygame.Rect(4350, 1900, 50, 50),
+        "money_buff": 5.0,
+        "rods": {
+            "esqueleto_maldito": {
+                "name": "Vara do Esqueleto Maldito", 
+                "price": 1260000,  # Reduzido em 50% (de 2520000)
+                "bar_size": 225, 
+                "luck": 9.0, 
+                "req_level": 50,
+                "resilience": 10,
+                "color": (180, 180, 180),
+                "decor": "esqueleto_maldito"
+            },
+            "ceifador_almas": {
+                "name": "Ceifadeira de Almas", 
+                "price": 3150000,  # Reduzido em 50% (de 6300000)
+                "bar_size": 245, 
+                "luck": 12.0, 
+                "req_level": 60,
+                "resilience": 0,
+                "color": (20, 20, 25),
+                "decor": "ceifador_almas"
+            }
+        },
+        "lakes": {
+            "LagoOssos": {
+                "name": "Lago de Ossos", "req_level": 50, "color": (90, 70, 70),
+                "rect": pygame.Rect(4080, 2100, 340, 250),
+                "fish": {
+                    "Comum": ["Piranha Esquelética"],
+                    "Incomum": ["Carpa de Marfim"],
+                    "Raro": ["Tubarão Fantasma Ósseo"],
+                    "Épico": ["Serpente dos Túmulos"],
+                    "Lendário": ["Guardião da Cripta"],
+                    "Mítico": ["Lord dos Ossos Eternos"],
+                    "SECRETO": ["Fóssil Primordial Desperto"]
+                }
+            },
+            "LagoProfano": {
+                "name": "Lago Profano", "req_level": 60, "color": (30, 10, 20),
+                "rect": pygame.Rect(4500, 2100, 340, 250),
+                "fish": {
+                    "Comum": ["Enguia Necrótica"],
+                    "Incomum": ["Arraia Sangrenta"],
+                    "Raro": ["Espectro das Profundezas Cegas"],
+                    "Épico": ["Leviathan da Pira"],
+                    "Lendário": ["Archdemon Aquático"],
+                    "Mítico": ["Deus Caído do Lago Profano"],
+                    "SECRETO": ["A essência do Caos Sombrio"]
+                }
+            }
+        }
+    }
+}
+
+BOATS = {
+    "pe": {"name": "A Pé", "price": 0, "speed_mult": 1.0},
+    "bote": {"name": "Bote de Madeira", "price": 5000, "speed_mult": 2.0},
+    "speedboat": {"name": "Speedboat Ultra", "price": 60000, "speed_mult": 4.0}
+}
+
+BAITS = {
+    "minhoca": {"name": "Minhoca Comum", "price": 0, "luck_mult": 1.0},
+    "camarao": {"name": "Camarão Suculento", "price": 500, "luck_mult": 1.4, "pack": 5},
+    "brilhante": {"name": "Isca Mágica Brilhante", "price": 2000, "luck_mult": 2.2, "pack": 3}
+}
+
+def get_all_game_species():
+    species = set()
+    for isl in ISLANDS.values():
+        for lk in isl["lakes"].values():
+            for r_list in lk["fish"].values():
+                for fish_name in r_list:
+                    species.add(fish_name)
+    species.add("Eclipse Ancient Serpent")
+    return species
+
+def get_all_game_rods():
+    rods = set()
+    for isl in ISLANDS.values():
+        for r_key in isl["rods"].keys():
+            rods.add(r_key)
+    return rods
+
+class Camera:
+    def __init__(self, width, height):
+        self.camera = pygame.Rect(0, 0, width, height)
+        self.width = width
+        self.height = height
+
+    def apply(self, target):
+        if isinstance(target, pygame.Rect):
+            return target.move(self.camera.topleft)
+        return target[0] + self.camera.x, target[1] + self.camera.y
+
+    def update(self, target_pos):
+        x = -target_pos[0] + int(SCREEN_WIDTH / 2)
+        y = -target_pos[1] + int(SCREEN_HEIGHT / 2)
+
+        x = min(0, max(-(self.width - SCREEN_WIDTH), x))
+        y = min(0, max(-(self.height - SCREEN_HEIGHT), y))
+        self.camera = pygame.Rect(x, y, self.width, self.height)
+
+class Particle:
+    def __init__(self, x, y, color, vx=None, vy=None, size=None, lifetime=25):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.vx = vx if vx is not None else random.uniform(-3, 3)
+        self.vy = vy if vy is not None else random.uniform(-3, 3)
+        self.size = size if size is not None else random.randint(3, 7)
+        self.lifetime = lifetime
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.lifetime -= 1
+
+    def draw(self, surface, camera):
+        if self.lifetime > 0:
+            cx, cy = camera.apply((self.x, self.y))
+            pygame.draw.circle(surface, self.color, (int(cx), int(cy)), self.size)
+
+class FloatingText:
+    def __init__(self, x, y, text, color):
+        self.x = x
+        self.y = y
+        self.text = text
+        self.color = color
+        self.lifetime = 40
+
+    def update(self):
+        self.y -= 1.5
+        self.lifetime -= 1
+
+    def draw(self, surface, camera):
+        if self.lifetime > 0:
+            cx, cy = camera.apply((self.x, self.y))
+            lbl = font_medium.render(self.text, True, self.color)
+            surface.blit(lbl, (cx - lbl.get_width() // 2, cy))
+
+class Player:
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
+        self.base_speed = 7.0
+        self.radius = 16
+        self.coins = 150
+        self.level = 1
+        self.xp = 0
+        self.xp_next = 70
+        
+        self.equipped_rod = "bambu"
+        self.unlocked_rods = ["bambu"]
+        
+        self.equipped_boat = "pe"
+        self.unlocked_boats = ["pe"]
+        
+        self.equipped_bait = "minhoca"
+        self.baits_stock = {"camarao": 0, "brilhante": 0}
+
+        self.inventory = []
+        self.bestiary = {}
+        self.is_in_water = False
+
+    def add_xp(self, amount, game):
+        self.xp += amount
+        game.add_floating_text(self.x, self.y - 30, f"+{amount} XP", CYAN)
+        while self.xp >= self.xp_next:
+            self.xp -= self.xp_next
+            self.level += 1
+            self.xp_next = int(self.xp_next * 1.175)
+            game.show_toast(f" SUBIU PARA O NÍVEL {self.level}! ")
+            game.spawn_sparkles(self.x, self.y, GOLD, 20)
+
+    def get_rect(self, x=None, y=None):
+        px = self.x if x is None else x
+        py = self.y if y is None else y
+        return pygame.Rect(px - self.radius, py - self.radius, self.radius * 2, self.radius * 2)
+
+    def check_on_land(self, rect):
+        for isl in ISLANDS.values():
+            if isl["rect"].colliderect(rect):
+                in_lake = False
+                for lk in isl["lakes"].values():
+                    if lk["rect"].colliderect(rect):
+                        in_lake = True
+                        break
+                if not in_lake:
+                    return True
+        return False
+
+    def move(self, dx, dy, world_bounds):
+        if dx == 0 and dy == 0:
+            return
+
+        if self.equipped_boat != "pe":
+            speed = self.base_speed * BOATS[self.equipped_boat]["speed_mult"]
+        else:
+            speed = self.base_speed
+
+        next_x = max(20, min(world_bounds[0] - 20, self.x + dx * speed))
+        next_y = max(20, min(world_bounds[1] - 20, self.y + dy * speed))
+
+        test_rect_x = self.get_rect(x=next_x, y=self.y)
+        land_x = self.check_on_land(test_rect_x)
+        
+        if self.equipped_boat == "pe":
+            if land_x:
+                self.x = next_x
+        else:
+            self.x = next_x
+
+        test_rect_y = self.get_rect(x=self.x, y=next_y)
+        land_y = self.check_on_land(test_rect_y)
+        
+        if self.equipped_boat == "pe":
+            if land_y:
+                self.y = next_y
+        else:
+            self.y = next_y
+
+        self.is_in_water = not self.check_on_land(self.get_rect())
+
+    def draw(self, surface, camera, game_instance):
+        cx, cy = camera.apply((self.x, self.y))
+        
+        if self.equipped_boat != "pe":
+            if self.equipped_boat == "bote":
+                pygame.draw.ellipse(surface, (139, 69, 19), (cx - 24, cy - 14, 48, 28))
+                pygame.draw.ellipse(surface, (100, 40, 10), (cx - 24, cy - 14, 48, 28), 3)
+            elif self.equipped_boat == "speedboat":
+                pygame.draw.polygon(surface, WHITE, [(cx + 28, cy), (cx - 22, cy - 16), (cx - 18, cy), (cx - 22, cy + 16)])
+                pygame.draw.polygon(surface, RED, [(cx + 28, cy), (cx - 22, cy - 16), (cx - 18, cy), (cx - 22, cy + 16)], 2)
+
+        pygame.draw.circle(surface, (255, 220, 177), (int(cx), int(cy - 8)), 9)
+        pygame.draw.line(surface, BLACK, (cx, cy), (cx, cy + 12), 3)
+        
+        rod_data = game_instance.get_rod_data(self.equipped_rod)
+        rod_color = rod_data.get("color", GOLD)
+        decor = rod_data.get("decor", "bambu")
+
+        tip_x, tip_y = cx + 24, cy - 18
+        base_hx, base_hy = cx, cy + 2
+
+        pygame.draw.line(surface, rod_color, (base_hx, base_hy), (tip_x, tip_y), 3)
+
+        if decor == "bambu":
+            pygame.draw.line(surface, (80, 50, 20), (cx + 8, cy - 4), (cx + 12, cy - 8), 2)
+            pygame.draw.circle(surface, (50, 30, 10), (int(tip_x), int(tip_y)), 2)
+        elif decor == "fibra":
+            pygame.draw.circle(surface, CYAN, (int(tip_x), int(tip_y)), 3)
+        elif decor == "ouro":
+            pygame.draw.polygon(surface, YELLOW, [(tip_x, tip_y - 5), (tip_x + 4, tip_y), (tip_x, tip_y + 5), (tip_x - 4, tip_y)])
+        elif decor == "mitica":
+            pygame.draw.circle(surface, (0, 255, 255), (int(tip_x), int(tip_y)), 4)
+            pygame.draw.circle(surface, WHITE, (int(tip_x), int(tip_y)), 2)
+        elif decor == "granito":
+            pygame.draw.rect(surface, (160, 160, 160), (tip_x - 3, tip_y - 3, 6, 6))
+        elif decor == "basalto":
+            pygame.draw.polygon(surface, (255, 69, 0), [(tip_x, tip_y - 4), (tip_x + 3, tip_y + 2), (tip_x - 3, tip_y + 2)])
+        elif decor == "prismatica":
+            colors_list = [RED, GREEN, CYAN, YELLOW, PURPLE]
+            p_col = colors_list[(pygame.time.get_ticks() // 150) % len(colors_list)]
+            pygame.draw.circle(surface, p_col, (int(tip_x), int(tip_y)), 5)
+        elif decor == "nucleo_cristal":
+            pygame.draw.polygon(surface, (200, 50, 255), [(tip_x, tip_y - 6), (tip_x + 4, tip_y), (tip_x, tip_y + 6), (tip_x - 4, tip_y)])
+            pygame.draw.circle(surface, WHITE, (int(tip_x), int(tip_y)), 2)
+        elif decor == "sombra_abissal":
+            pygame.draw.circle(surface, (50, 0, 80), (int(tip_x), int(tip_y)), 4)
+            pygame.draw.circle(surface, RED, (int(tip_x), int(tip_y)), 2)
+        elif decor == "vazio_hadal":
+            pygame.draw.circle(surface, (150, 0, 255), (int(tip_x), int(tip_y)), 5)
+            pygame.draw.circle(surface, BLACK, (int(tip_x), int(tip_y)), 2)
+        elif decor == "esqueleto_maldito":
+            pygame.draw.circle(surface, WHITE, (int(tip_x), int(tip_y)), 5)
+            pygame.draw.circle(surface, GRAY, (int(tip_x), int(tip_y)), 2)
+        elif decor == "ceifador_almas":
+            pygame.draw.arc(surface, (220, 20, 60), pygame.Rect(tip_x - 10, tip_y - 12, 16, 16), 0, math.pi, 3)
+            pygame.draw.polygon(surface, (30, 30, 35), [(tip_x, tip_y - 4), (tip_x + 6, tip_y - 10), (tip_x - 2, tip_y - 8)])
+            pygame.draw.circle(surface, RED, (int(tip_x), int(tip_y)), 3)
+        elif decor == "masterline":
+            pygame.draw.circle(surface, WHITE, (int(tip_x), int(tip_y)), 6)
+            pygame.draw.circle(surface, (255, 0, 255), (int(tip_x), int(tip_y)), 3)
+
+class FischGame:
+    def __init__(self):
+        self.camera = Camera(WORLD_WIDTH, WORLD_HEIGHT)
+        self.player = Player(400, 350)
+        
+        self.state = 'EXPLORING'
+        self.active_lake = None
+        self.active_island = None
+        self.wait_timer = 0
+        self.caught_fish = None
+        
+        self.current_weather = "Ensolarado"
+        self.weather_timer = pygame.time.get_ticks() + 60000
+
+        self.eclipse_zone = None
+        self.eclipse_msg_timer = 0
+        self.eclipse_guaranteed_catch = False
+        self.is_eclipse_fishing = False
+
+        self.track_width = 420
+        self.fish_pos = 210
+        self.fish_target = 210
+        self.bar_pos = 150
+        self.bar_vel = 0
+        self.progress = 30.0
+        self.current_fish = None
+        self.perfect_catch = True
+
+        self.particles = []
+        self.floating_texts = []
+        self.toast_msg = ""
+        self.toast_timer = 0
+
+        self.bestiary_page = 0
+        self.inventory_scroll = 0
+        
+        self.is_dragging_inventory = False
+        self.inventory_touch_start_y = 0
+        
+        self.inventory_favorite_buttons = []
+
+        # Configurações do Joystick Virtual
+        self.joystick_center = (110, SCREEN_HEIGHT - 110)
+        self.joystick_radius = 65
+        self.joystick_handle_radius = 28
+        self.joystick_active = False
+        self.joystick_pos = [float(self.joystick_center[0]), float(self.joystick_center[1])]
+        self.joystick_vector = (0.0, 0.0)
+
+        self.btn_action = pygame.Rect(SCREEN_WIDTH - 135, SCREEN_HEIGHT - 135, 105, 105)
+        self.btn_inv = pygame.Rect(SCREEN_WIDTH - 250, 12, 110, 36)
+        self.btn_bestiary = pygame.Rect(SCREEN_WIDTH - 130, 12, 115, 36)
+
+        self.touch_action = False
+        self.active_shop_type = None
+        self.current_shop_island = None
+
+        self.load_game()
+
+    def run_menu(self):
+        fonte_titulo = pygame.font.SysFont("Arial", 90, bold=True)
+        fonte_botao = pygame.font.SysFont("Arial", 40)
+
+        largura_botao, altura_botao = 220, 65
+        x_botao = (SCREEN_WIDTH - largura_botao) // 2
+        y_botao = 400
+        ret_botao = pygame.Rect(x_botao, y_botao, largura_botao, altura_botao)
+
+        rodando_menu = True
+        while rodando_menu:
+            clock.tick(FPS)
+            
+            for evento in pygame.event.get():
+                if evento.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:
+                        if ret_botao.collidepoint(evento.pos):
+                            rodando_menu = False
+
+            screen.fill(BLACK)
+
+            texto_titulo = fonte_titulo.render("Fisch", True, WHITE)
+            ret_titulo = texto_titulo.get_rect(center=(SCREEN_WIDTH // 2, 230))
+            screen.blit(texto_titulo, ret_titulo)
+
+            mouse_pos = pygame.mouse.get_pos()
+            cor_atual = (60, 60, 70) if ret_botao.collidepoint(mouse_pos) else (35, 35, 45)
+
+            pygame.draw.rect(screen, cor_atual, ret_botao, border_radius=10)
+            pygame.draw.rect(screen, WHITE, ret_botao, 2, border_radius=10)
+
+            texto_botao = fonte_botao.render("Jogar", True, WHITE)
+            ret_texto_botao = texto_botao.get_rect(center=ret_botao.center)
+            screen.blit(texto_botao, ret_texto_botao)
+
+            pygame.display.flip()
+
+    def save_game(self):
+        try:
+            data = {
+                "x": self.player.x,
+                "y": self.player.y,
+                "coins": self.player.coins,
+                "level": self.player.level,
+                "xp": self.player.xp,
+                "xp_next": self.player.xp_next,
+                "equipped_rod": self.player.equipped_rod,
+                "unlocked_rods": self.player.unlocked_rods,
+                "equipped_boat": self.player.equipped_boat,
+                "unlocked_boats": self.player.unlocked_boats,
+                "equipped_bait": self.player.equipped_bait,
+                "baits_stock": self.player.baits_stock,
+                "inventory": self.player.inventory,
+                "bestiary": self.player.bestiary
+            }
+            temp_file = SAVE_FILE + ".tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            if os.path.exists(SAVE_FILE):
+                os.remove(SAVE_FILE)
+            os.rename(temp_file, SAVE_FILE)
+        except Exception as e:
+            print(f"Erro ao salvar o jogo: {e}")
+
+    def load_game(self):
+        if not os.path.exists(SAVE_FILE):
+            return
+        try:
+            with open(SAVE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                self.player.x = float(data.get("x", self.player.x))
+                self.player.y = float(data.get("y", self.player.y))
+                self.player.coins = int(data.get("coins", self.player.coins))
+                self.player.level = int(data.get("level", self.player.level))
+                self.player.xp = int(data.get("xp", self.player.xp))
+                self.player.xp_next = int(data.get("xp_next", self.player.xp_next))
+                self.player.equipped_rod = data.get("equipped_rod", self.player.equipped_rod)
+                self.player.unlocked_rods = data.get("unlocked_rods", self.player.unlocked_rods)
+                self.player.equipped_boat = data.get("equipped_boat", self.player.equipped_boat)
+                self.player.unlocked_boats = data.get("unlocked_boats", self.player.unlocked_boats)
+                self.player.equipped_bait = data.get("equipped_bait", self.player.equipped_bait)
+                self.player.baits_stock = data.get("baits_stock", self.player.baits_stock)
+                
+                raw_inv = data.get("inventory", [])
+                for fish in raw_inv:
+                    if "favorited" not in fish:
+                        fish["favorited"] = False
+                    if "is_shiny" not in fish:
+                        fish["is_shiny"] = False
+                    if "is_sparkling" not in fish:
+                        fish["is_sparkling"] = False
+                self.player.inventory = raw_inv
+
+                self.player.bestiary = data.get("bestiary", self.player.bestiary)
+                
+                for fish_name, f_data in self.player.bestiary.items():
+                    if "rarity" not in f_data or f_data["rarity"] not in FISH_RARITY_INFO:
+                        found_rarity = "Comum"
+                        for isl in ISLANDS.values():
+                            for lk in isl["lakes"].values():
+                                for r_name, r_list in lk["fish"].items():
+                                    if fish_name in r_list:
+                                        found_rarity = r_name
+                                        break
+                        if fish_name == "Eclipse Ancient Serpent":
+                            found_rarity = "Divina"
+                        f_data["rarity"] = found_rarity
+        except Exception as e:
+            print(f"Erro ao carregar o jogo: {e}")
+
+    def spawn_eclipse_zone(self):
+        zone_size = 400
+        for _ in range(150):
+            rx = random.randint(100, WORLD_WIDTH - zone_size - 100)
+            ry = random.randint(100, WORLD_HEIGHT - zone_size - 100)
+            candidate = pygame.Rect(rx, ry, zone_size, zone_size)
+
+            intersects = False
+            for isl in ISLANDS.values():
+                if candidate.colliderect(isl["rect"].inflate(100, 100)):
+                    intersects = True
+                    break
+            if not intersects:
+                self.eclipse_zone = candidate
+                return
+        self.eclipse_zone = pygame.Rect(1200, 1200, zone_size, zone_size)
+
+    def check_weather_rotation(self):
+        if random.random() < 0.001:
+            self.change_weather("Eclipse")
+        else:
+            self.change_weather()
+
+    def change_weather(self, weather_name=None):
+        if weather_name is None:
+            opts = [w for w in WEATHER_TYPES.keys() if w != "Eclipse" and w != self.current_weather]
+            weather_name = random.choice(opts)
+
+        self.current_weather = weather_name
+        self.weather_timer = pygame.time.get_ticks() + 60000
+
+        if weather_name == "Eclipse":
+            self.eclipse_msg_timer = pygame.time.get_ticks() + 10000
+            self.eclipse_guaranteed_catch = True
+            self.spawn_eclipse_zone()
+            self.show_toast("UM SER DIVINO SURGIU NO OCEANO!")
+        else:
+            self.eclipse_zone = None
+            self.eclipse_guaranteed_catch = False
+            self.is_eclipse_fishing = False
+            info = WEATHER_TYPES[self.current_weather]
+            self.show_toast(f" CLIMA MUDOU: {info['name'].upper()} ({info['luck_mult']}x Sorte)!")
+
+    def spawn_sparkles(self, x, y, color, count=15):
+        for _ in range(count):
+            self.particles.append(Particle(x, y, color, lifetime=random.randint(15, 30)))
+
+    def add_floating_text(self, x, y, text, color):
+        self.floating_texts.append(FloatingText(x, y, text, color))
+
+    def show_toast(self, text):
+        self.toast_msg = text
+        self.toast_timer = pygame.time.get_ticks() + 3000
+
+    def check_masterline_unlock(self):
+        if "masterline" in self.player.unlocked_rods:
+            return
+
+        all_species = get_all_game_species()
+        all_rods = get_all_game_rods()
+        all_boats = set(BOATS.keys())
+
+        bestiary_done = all_species.issubset(set(self.player.bestiary.keys()))
+        rods_done = all_rods.issubset(set(self.player.unlocked_rods))
+        boats_done = all_boats.issubset(set(self.player.unlocked_boats))
+        level_done = self.player.level >= 100
+        coins_done = self.player.coins >= 5000000
+
+        if bestiary_done and rods_done and boats_done and level_done and coins_done:
+            if "masterline" not in self.player.unlocked_rods:
+                self.player.unlocked_rods.append("masterline")
+            self.player.equipped_rod = "masterline"
+            self.show_toast(" CONQUISTA SUPREMA! Você obteve a VARA MASTERLINE! ")
+            self.spawn_sparkles(self.player.x, self.player.y, (255, 0, 255), 30)
+            self.save_game()
+
+    def get_rod_data(self, rod_key):
+        if rod_key == "masterline":
+            return MASTERLINE_ROD
+        for isl in ISLANDS.values():
+            if rod_key in isl["rods"]:
+                return isl["rods"][rod_key]
+        return ISLANDS["inicial"]["rods"]["bambu"]
+
+    def get_random_fish(self, lake_data):
+        if self.is_eclipse_fishing and self.eclipse_guaranteed_catch:
+            self.eclipse_guaranteed_catch = False
+            info = FISH_RARITY_INFO["Divina"]
+            base_price = info["price"]
+        else:
+            rod_data = self.get_rod_data(self.player.equipped_rod)
+            bait_data = BAITS[self.player.equipped_bait]
+            weather_info = WEATHER_TYPES[self.current_weather]
+
+            total_luck = rod_data["luck"] * bait_data["luck_mult"] * weather_info["luck_mult"]
+
+            weights = []
+            rarities = [r for r in FISH_RARITY_INFO.keys() if r != "Divina"]
+            for r in rarities:
+                base_chance = FISH_RARITY_INFO[r]["chance"]
+                if r in ["Raro", "Épico", "Lendário", "Mítico", "SECRETO"]:
+                    weights.append(base_chance * total_luck)
+                else:
+                    weights.append(base_chance)
+
+            available_rarities = [r for r in rarities if r in lake_data["fish"] and len(lake_data["fish"][r]) > 0]
+            if not available_rarities:
+                available_rarities = ["Comum"]
+
+            filtered_rarities = []
+            filtered_weights = []
+            for r in available_rarities:
+                idx = rarities.index(r)
+                filtered_rarities.append(r)
+                filtered_weights.append(weights[idx])
+
+            chosen_rarity = random.choices(filtered_rarities, weights=filtered_weights, k=1)[0]
+            
+            if self.player.equipped_bait != "minhoca":
+                self.player.baits_stock[self.player.equipped_bait] = max(0, self.player.baits_stock[self.player.equipped_bait] - 1)
+                if self.player.baits_stock[self.player.equipped_bait] <= 0:
+                    self.player.equipped_bait = "minhoca"
+                    self.show_toast("Sua isca acabou! Voltando para Minhoca.")
+
+            available_species = lake_data["fish"].get(chosen_rarity, [])
+            if not available_species:
+                available_species = ["Peixe Abissal Misterioso"]
+
+            name = random.choice(available_species)
+            info = FISH_RARITY_INFO[chosen_rarity]
+            
+            weight = round(random.uniform(1.0, 40.0 if chosen_rarity not in ["Mítico", "SECRETO"] else 250.0), 2)
+            base_price = int(info["price"] * (weight / 5.0) + info["price"] * 0.2)
+
+            # Aplicação do multiplicador de dinheiro da ilha atual
+            if self.active_island and self.active_island in ISLANDS:
+                base_price = int(base_price * ISLANDS[self.active_island].get("money_buff", 1.0))
+
+            lake_level = lake_data.get("req_level", 1)
+            if lake_level >= 50:
+                area_xp_multiplier = 1.0 + (lake_level * 1.8)
+            elif lake_level >= 30:
+                area_xp_multiplier = 1.0 + (lake_level * 1.2)
+            else:
+                area_xp_multiplier = 1.0 + (lake_level * 0.65)
+                
+            scaled_xp = int(info["xp"] * area_xp_multiplier)
+
+            fish_result = {
+                "name": name,
+                "rarity": chosen_rarity,
+                "weight": weight,
+                "price": base_price,
+                "xp": scaled_xp,
+                "color": info["color"],
+                "speed": info["speed"],
+                "lake": lake_data["name"],
+                "favorited": False,
+                "is_shiny": False,
+                "is_sparkling": False
+            }
+            
+            is_shiny = random.random() < 0.01
+            is_sparkling = random.random() < 0.03
+
+            fish_result["is_shiny"] = is_shiny
+            fish_result["is_sparkling"] = is_sparkling
+
+            final_price = float(base_price)
+            if is_shiny:
+                final_price *= 2.0
+            if is_sparkling:
+                final_price *= 1.5
+            
+            fish_result["price"] = int(final_price)
+            return fish_result
+
+        weight = round(random.uniform(250.0, 800.0), 2)
+        is_shiny = random.random() < 0.01
+        is_sparkling = random.random() < 0.03
+        final_price = float(base_price)
+        if self.active_island and self.active_island in ISLANDS:
+            final_price *= ISLANDS[self.active_island].get("money_buff", 1.0)
+        if is_shiny: final_price *= 2.0
+        if is_sparkling: final_price *= 1.5
+
+        return {
+            "name": "Eclipse Ancient Serpent",
+            "rarity": "Divina",
+            "weight": weight,
+            "price": int(final_price),
+            "xp": info["xp"],
+            "color": info["color"],
+            "speed": info["speed"],
+            "lake": "Oceano do Eclipse",
+            "favorited": False,
+            "is_shiny": is_shiny,
+            "is_sparkling": is_sparkling
+        }
+
+    def start_fishing(self, lake_data, island_key, is_eclipse=False):
+        if self.state != 'EXPLORING':
+            return
+
+        if not is_eclipse and self.player.level < lake_data["req_level"]:
+            self.show_toast(f"Requer Nível {lake_data['req_level']} para pescar aqui!")
+            return
+
+        self.active_lake = lake_data
+        self.active_island = island_key
+        self.is_eclipse_fishing = is_eclipse
+
+        rod_data = self.get_rod_data(self.player.equipped_rod)
+        
+        if rod_data.get("instant_bite", False):
+            self.start_minigame()
+        else:
+            self.state = 'WAITING_BITES'
+            self.wait_timer = pygame.time.get_ticks() + random.randint(1200, 2800)
+
+    def start_minigame(self):
+        if self.state not in ('EXPLORING', 'WAITING_BITES'):
+            return
+        self.state = 'MINIGAME'
+        self.current_fish = self.get_random_fish(self.active_lake)
+        self.perfect_catch = True
+        
+        self.fish_pos = self.track_width / 2
+        rod_data = self.get_rod_data(self.player.equipped_rod)
+        bar_size = rod_data["bar_size"]
+        self.bar_pos = (self.track_width - bar_size) / 2
+        self.bar_vel = 0
+        self.progress = 35.0
+        self.fish_target = random.randint(20, self.track_width - 20)
+
+    def update_minigame(self, action_held):
+        if self.state != 'MINIGAME' or not self.current_fish:
+            return
+
+        info = self.current_fish
+        rod_data = self.get_rod_data(self.player.equipped_rod)
+        bar_size = rod_data["bar_size"]
+
+        resilience = rod_data.get("resilience", 0)
+        res_multiplier = max(0.05, 1.0 - (resilience / 100.0))
+
+        if abs(self.fish_pos - self.fish_target) < 15 or random.random() < (0.05 * res_multiplier):
+            self.fish_target = random.randint(20, self.track_width - 20)
+
+        dir_x = 1 if self.fish_target > self.fish_pos else -1
+        effective_speed = (info["speed"] * 0.85) * res_multiplier
+        self.fish_pos += dir_x * effective_speed
+        self.fish_pos = max(10, min(self.track_width - 10, self.fish_pos))
+
+        if action_held:
+            self.bar_vel += 3.2
+        else:
+            self.bar_vel -= 3.2
+
+        self.bar_vel = max(-15.0, min(15.0, self.bar_vel))
+        self.bar_pos += self.bar_vel
+        
+        if self.bar_pos < 0:
+            self.bar_pos = 0
+            self.bar_vel = 0
+        elif self.bar_pos > self.track_width - bar_size:
+            self.bar_pos = self.track_width - bar_size
+            self.bar_vel = 0
+
+        in_zone = self.bar_pos <= self.fish_pos <= (self.bar_pos + bar_size)
+        
+        # Redução de velocidade de progresso por raridade
+        rarity_mult = 1.0
+        fish_rarity = info["rarity"]
+        if fish_rarity == "Lendário":
+            rarity_mult = 0.7   # -30%
+        elif fish_rarity == "Mítico":
+            rarity_mult = 0.4   # -60%
+        elif fish_rarity == "SECRETO":
+            rarity_mult = 0.3   # -70%
+        elif fish_rarity == "Divina":
+            rarity_mult = 0.25  # -75%
+
+        prog_speed = 1.4 * rod_data.get("progress_mult", 1.0) * rarity_mult
+
+        if in_zone:
+            self.progress += prog_speed
+            if random.random() < 0.2:
+                self.particles.append(Particle(SCREEN_WIDTH // 2 - self.track_width // 2 + self.fish_pos, SCREEN_HEIGHT // 2, info["color"], lifetime=10))
+        else:
+            self.progress -= 0.8
+            self.perfect_catch = False
+
+        self.progress = max(0, min(100, self.progress))
+
+        if self.progress >= 100:
+            self.state = 'RESULT'
+            
+            if self.perfect_catch:
+                self.current_fish["xp"] = int(self.current_fish["xp"] * 1.5)
+                self.show_toast("CAPTURA PERFEITA! 1.5x XP!")
+
+            self.caught_fish = self.current_fish
+            self.player.inventory.append(self.current_fish)
+            self.player.add_xp(self.current_fish["xp"], self)
+            
+            fname = self.current_fish["name"]
+            if fname not in self.player.bestiary:
+                self.player.bestiary[fname] = {"caught": 0, "max_weight": 0, "rarity": self.current_fish["rarity"]}
+            self.player.bestiary[fname]["caught"] += 1
+            self.player.bestiary[fname]["max_weight"] = max(self.player.bestiary[fname]["max_weight"], self.current_fish["weight"])
+            self.player.bestiary[fname]["rarity"] = self.current_fish["rarity"]
+
+            self.spawn_sparkles(self.player.x, self.player.y, self.current_fish["color"], 25)
+            self.check_masterline_unlock()
+            self.save_game()
+            self.is_eclipse_fishing = False
+
+        elif self.progress <= 0:
+            self.state = 'RESULT'
+            self.caught_fish = None
+            self.is_eclipse_fishing = False
+
+    def interact(self):
+        if self.state in ('SHOP', 'INVENTORY', 'BESTIARY', 'RESULT'):
+            if self.state == 'RESULT':
+                self.caught_fish = None
+            self.state = 'EXPLORING'
+            return
+
+        p_rect = self.player.get_rect()
+
+        if self.state == 'EXPLORING':
+            if self.current_weather == "Eclipse" and self.eclipse_zone:
+                if p_rect.colliderect(self.eclipse_zone):
+                    fake_eclipse_lake = {
+                        "name": "Linha Divina do Eclipse",
+                        "req_level": 1,
+                        "color": RED,
+                        "fish": {
+                            "Mítico": ["Ser do Vazio"],
+                            "SECRETO": ["Abismo Vivo"]
+                        }
+                    }
+                    self.start_fishing(fake_eclipse_lake, None, is_eclipse=True)
+                    return
+
+            for isl_key, isl in ISLANDS.items():
+                for lake_key, lake in isl["lakes"].items():
+                    if p_rect.colliderect(lake["rect"].inflate(20, 20)):
+                        self.start_fishing(lake, isl_key)
+                        return
+
+                if p_rect.colliderect(isl["vendor_npc"].inflate(30, 30)):
+                    if not self.player.inventory:
+                        self.show_toast("Você não tem peixes para vender!")
+                    else:
+                        unfavorited_fish = [f for f in self.player.inventory if not f.get("favorited", False)]
+                        if not unfavorited_fish:
+                            self.show_toast("Todos os peixes estão favoritados e protegidos!")
+                        else:
+                            total = sum(f['price'] for f in unfavorited_fish)
+                            count = len(unfavorited_fish)
+                            self.player.coins += total
+                            self.add_floating_text(self.player.x, self.player.y - 20, f"+C$ {total}", GOLD)
+                            
+                            self.player.inventory = [f for f in self.player.inventory if f.get("favorited", False)]
+                            self.show_toast(f"Vendeu {count} peixes por C$ {total}!")
+                            self.check_masterline_unlock()
+                            self.save_game()
+                    return
+
+                if p_rect.colliderect(isl["rod_npc"].inflate(30, 30)):
+                    self.state = 'SHOP'
+                    self.active_shop_type = 'rod'
+                    self.current_shop_island = isl_key
+                    return
+
+                if "boat_npc" in isl and p_rect.colliderect(isl["boat_npc"].inflate(30, 30)):
+                    self.state = 'SHOP'
+                    self.active_shop_type = 'boat'
+                    self.current_shop_island = isl_key
+                    return
+
+    def handle_shop_click(self, pos):
+        sx, sy = SCREEN_WIDTH // 2 - 280, SCREEN_HEIGHT // 2 - 250
+        close_btn = pygame.Rect(sx + 515, sy + 10, 30, 30)
+        if close_btn.collidepoint(pos):
+            self.state = 'EXPLORING'
+            return
+
+        if self.active_shop_type == 'rod':
+            isl = ISLANDS[self.current_shop_island]
+            y_off = sy + 65
+            for r_key, r_data in isl["rods"].items():
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                if btn_b.collidepoint(pos):
+                    is_unlocked = r_key in self.player.unlocked_rods
+                    if is_unlocked:
+                        self.player.equipped_rod = r_key
+                        self.show_toast(f"Equipou: {r_data['name']}")
+                    elif self.player.level < r_data['req_level']:
+                        self.show_toast(f"Requer Nível {r_data['req_level']}!")
+                    elif self.player.coins >= r_data['price']:
+                        self.player.coins -= r_data['price']
+                        if r_key not in self.player.unlocked_rods:
+                            self.player.unlocked_rods.append(r_key)
+                        self.player.equipped_rod = r_key
+                        self.show_toast(f"Comprou e Equipou: {r_data['name']}")
+                        self.check_masterline_unlock()
+                        self.save_game()
+                    else:
+                        self.show_toast("Moedas insuficientes!")
+                    return
+                y_off += 50
+
+            if "masterline" in self.player.unlocked_rods:
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                if btn_b.collidepoint(pos):
+                    self.player.equipped_rod = "masterline"
+                    self.show_toast("Equipou: VARA MASTERLINE")
+                    self.save_game()
+                    return
+                y_off += 50
+
+            y_off += 40
+            for b_key, b_data in BAITS.items():
+                if b_key == "minhoca": continue
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                if btn_b.collidepoint(pos):
+                    if self.player.coins >= b_data['price']:
+                        self.player.coins -= b_data['price']
+                        self.player.baits_stock[b_key] += b_data['pack']
+                        self.player.equipped_bait = b_key
+                        self.show_toast(f"Comprou {b_data['name']}!")
+                        self.save_game()
+                    else:
+                        self.show_toast("Moedas insuficientes!")
+                    return
+                y_off += 50
+
+        elif self.active_shop_type == 'boat':
+            y_off = sy + 80
+            for b_key, b_data in BOATS.items():
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 35)
+                if btn_b.collidepoint(pos):
+                    is_unlocked = b_key in self.player.unlocked_boats
+                    if is_unlocked:
+                        self.player.equipped_boat = b_key
+                        self.show_toast(f"Equipou veículo: {b_data['name']}")
+                        self.save_game()
+                    elif self.player.coins >= b_data['price']:
+                        self.player.coins -= b_data['price']
+                        if b_key not in self.player.unlocked_boats:
+                            self.player.unlocked_boats.append(b_key)
+                        self.player.equipped_boat = b_key
+                        self.show_toast(f"Adquiriu: {b_data['name']}!")
+                        self.check_masterline_unlock()
+                        self.save_game()
+                    else:
+                        self.show_toast("Moedas insuficientes!")
+                    return
+                y_off += 55
+
+    def update_joystick(self):
+        mouse_down = pygame.mouse.get_pressed()[0]
+        m_pos = pygame.mouse.get_pos()
+
+        if mouse_down:
+            if not self.joystick_active:
+                # Verifica se clicou na base do joystick para ativá-lo
+                dist = math.hypot(m_pos[0] - self.joystick_center[0], m_pos[1] - self.joystick_center[1])
+                if dist <= self.joystick_radius + 20:
+                    self.joystick_active = True
+
+            if self.joystick_active:
+                dx = m_pos[0] - self.joystick_center[0]
+                dy = m_pos[1] - self.joystick_center[1]
+                dist = math.hypot(dx, dy)
+                
+                if dist <= self.joystick_radius:
+                    self.joystick_pos = [float(m_pos[0]), float(m_pos[1])]
+                    if dist > 0:
+                        self.joystick_vector = (dx / self.joystick_radius, dy / self.joystick_radius)
+                    else:
+                        self.joystick_vector = (0.0, 0.0)
+                else:
+                    # Trava no limite do raio do joystick
+                    angle = math.atan2(dy, dx)
+                    self.joystick_pos[0] = self.joystick_center[0] + self.joystick_radius * math.cos(angle)
+                    self.joystick_pos[1] = self.joystick_center[1] + self.joystick_radius * math.sin(angle)
+                    self.joystick_vector = (math.cos(angle), math.sin(angle))
+        else:
+            self.joystick_active = False
+            self.joystick_pos = [float(self.joystick_center[0]), float(self.joystick_center[1])]
+            self.joystick_vector = (0.0, 0.0)
+
+        # Ação touch
+        self.touch_action = False
+        if mouse_down and self.btn_action.collidepoint(m_pos):
+            self.touch_action = True
+
+    def run(self):
+        self.run_menu()
+
+        running = True
+        while running:
+            clock.tick(FPS)
+            
+            if pygame.time.get_ticks() >= self.weather_timer:
+                self.check_weather_rotation()
+
+            keys = pygame.key.get_pressed()
+            self.update_joystick()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.save_game()
+                    running = False
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        self.interact()
+                    elif event.key in (pygame.K_e, pygame.K_i):
+                        self.state = 'EXPLORING' if self.state == 'INVENTORY' else 'INVENTORY'
+                    elif event.key == pygame.K_b:
+                        self.state = 'EXPLORING' if self.state == 'BESTIARY' else 'BESTIARY'
+                    elif event.key == pygame.K_ESCAPE:
+                        self.state = 'EXPLORING'
+                    elif self.state == 'INVENTORY':
+                        if event.key == pygame.K_UP:
+                            self.inventory_scroll = max(0, self.inventory_scroll - 1)
+                        elif event.key == pygame.K_DOWN:
+                            max_scroll = max(0, len(self.player.inventory) - 9)
+                            self.inventory_scroll = min(max_scroll, self.inventory_scroll + 1)
+
+                if event.type == pygame.MOUSEWHEEL:
+                    if self.state == 'INVENTORY':
+                        self.inventory_scroll -= event.y
+                        max_scroll = max(0, len(self.player.inventory) - 9)
+                        self.inventory_scroll = max(0, min(max_scroll, self.inventory_scroll))
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    m_pos = event.pos
+                    if self.state == 'INVENTORY':
+                        clicked_fav = False
+                        for fish_ref, btn_rect in self.inventory_favorite_buttons:
+                            if btn_rect.collidepoint(m_pos):
+                                fish_ref["favorited"] = not fish_ref.get("favorited", False)
+                                if fish_ref["favorited"]:
+                                    self.show_toast("Peixe favoritado!")
+                                else:
+                                    self.show_toast("Peixe desfavoritado!")
+                                self.save_game()
+                                clicked_fav = True
+                                break
+                        
+                        if not clicked_fav:
+                            ix, iy = SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 200
+                            inv_rect = pygame.Rect(ix, iy, 460, 400)
+                            if inv_rect.collidepoint(m_pos):
+                                self.is_dragging_inventory = True
+                                self.inventory_touch_start_y = m_pos[1]
+
+                    if self.state == 'SHOP':
+                        self.handle_shop_click(m_pos)
+                    elif self.state == 'INVENTORY':
+                        ix, iy = SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 200
+                        close_btn = pygame.Rect(ix + 420, iy + 10, 30, 30)
+                        if close_btn.collidepoint(m_pos) or self.btn_inv.collidepoint(m_pos):
+                            self.state = 'EXPLORING'
+                            self.is_dragging_inventory = False
+                    elif self.state == 'BESTIARY':
+                        bx, by = SCREEN_WIDTH // 2 - 380, SCREEN_HEIGHT // 2 - 230
+                        bw, bh = 760, 460
+                        close_btn = pygame.Rect(bx + bw - 40, by + 10, 30, 30)
+                        btn_prev = pygame.Rect(bx + 20, by + bh - 40, 110, 30)
+                        btn_next = pygame.Rect(bx + bw - 130, by + bh - 40, 110, 30)
+
+                        if close_btn.collidepoint(m_pos) or self.btn_bestiary.collidepoint(m_pos):
+                            self.state = 'EXPLORING'
+                        elif btn_prev.collidepoint(m_pos):
+                            self.bestiary_page = max(0, self.bestiary_page - 1)
+                        elif btn_next.collidepoint(m_pos):
+                            max_pages = len(ISLANDS) + 1
+                            self.bestiary_page = min(max_pages - 1, self.bestiary_page + 1)
+                    elif self.state == 'RESULT':
+                        self.interact()
+                    else:
+                        if self.btn_inv.collidepoint(m_pos):
+                            self.state = 'INVENTORY'
+                            self.inventory_scroll = 0
+                        elif self.btn_bestiary.collidepoint(m_pos):
+                            self.state = 'BESTIARY'
+                        elif self.btn_action.collidepoint(m_pos):
+                            self.interact()
+
+                if event.type == pygame.MOUSEMOTION:
+                    if self.state == 'INVENTORY' and self.is_dragging_inventory:
+                        m_pos = event.pos
+                        dy = m_pos[1] - self.inventory_touch_start_y
+                        if abs(dy) > 25:
+                            steps = int(abs(dy) / 25)
+                            max_scroll = max(0, len(self.player.inventory) - 9)
+                            if dy > 0:
+                                self.inventory_scroll = max(0, self.inventory_scroll - steps)
+                            else:
+                                self.inventory_scroll = min(max_scroll, self.inventory_scroll + steps)
+                            self.inventory_touch_start_y = m_pos[1]
+
+                if event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 1:
+                        self.is_dragging_inventory = False
+
+            if self.state == 'EXPLORING':
+                # Combina entrada do teclado (W, A, S, D ou setas) com o Joystick analógico
+                dx = (1 if keys[pygame.K_d] or keys[pygame.K_RIGHT] else 0) - \
+                     (1 if keys[pygame.K_a] or keys[pygame.K_LEFT] else 0)
+                dy = (1 if keys[pygame.K_s] or keys[pygame.K_DOWN] else 0) - \
+                     (1 if keys[pygame.K_w] or keys[pygame.K_UP] else 0)
+                
+                if dx == 0 and dy == 0 and self.joystick_active:
+                    dx, dy = self.joystick_vector[0], self.joystick_vector[1]
+
+                self.player.move(dx, dy, (WORLD_WIDTH, WORLD_HEIGHT))
+                self.camera.update((self.player.x, self.player.y))
+
+            elif self.state == 'WAITING_BITES':
+                if pygame.time.get_ticks() >= self.wait_timer:
+                    self.start_minigame()
+
+            elif self.state == 'MINIGAME':
+                action_held = keys[pygame.K_SPACE] or self.touch_action
+                self.update_minigame(action_held)
+
+            for p in self.particles[:]:
+                p.update()
+                if p.lifetime <= 0: self.particles.remove(p)
+
+            for ft in self.floating_texts[:]:
+                ft.update()
+                if ft.lifetime <= 0: self.floating_texts.remove(ft)
+
+            self.draw()
+
+        pygame.quit()
+
+    def draw(self):
+        screen.fill(COLOR_OCEAN)
+
+        if self.current_weather == "Eclipse" and self.eclipse_zone:
+            ez_cam = self.camera.apply(self.eclipse_zone)
+            pygame.draw.rect(screen, (200, 0, 0), ez_cam, width=6, border_radius=10)
+            pygame.draw.rect(screen, (100, 0, 0), ez_cam.inflate(-8, -8), width=2, border_radius=8)
+            
+            pygame.draw.line(screen, RED, (ez_cam.left, ez_cam.top), (ez_cam.left + 40, ez_cam.top), 4)
+            pygame.draw.line(screen, RED, (ez_cam.left, ez_cam.top), (ez_cam.left, ez_cam.top + 40), 4)
+
+            ez_lbl = font_medium.render("ZONA DIVINA DO ECLIPSE (400x400)", True, RED)
+            screen.blit(ez_lbl, (ez_cam.centerx - ez_lbl.get_width() // 2, ez_cam.top + 15))
+
+        for isl_key, isl in ISLANDS.items():
+            rect_cam = self.camera.apply(isl["rect"])
+            
+            pygame.draw.rect(screen, isl["border_color"], rect_cam.inflate(30, 30), border_radius=16)
+            pygame.draw.rect(screen, isl["color"], rect_cam, border_radius=12)
+
+            title = font_large.render(isl["name"], True, WHITE)
+            screen.blit(title, (rect_cam.centerx - title.get_width() // 2, rect_cam.top + 15))
+
+            for lake_key, lake in isl["lakes"].items():
+                l_cam = self.camera.apply(lake["rect"])
+                pygame.draw.rect(screen, COLOR_SAND, l_cam.inflate(16, 16), border_radius=10)
+                pygame.draw.rect(screen, lake["color"], l_cam, border_radius=8)
+                
+                lbl = font_small.render(f"{lake['name']} (Lvl {lake['req_level']})", True, WHITE)
+                screen.blit(lbl, (l_cam.centerx - lbl.get_width() // 2, l_cam.top - 20))
+
+            v_cam = self.camera.apply(isl["vendor_npc"])
+            pygame.draw.rect(screen, (142, 68, 173), v_cam, border_radius=8)
+            pygame.draw.circle(screen, (255, 220, 177), (v_cam.centerx, v_cam.top + 12), 10)
+            v_txt = font_xs.render("VENDEDOR", True, WHITE)
+            screen.blit(v_txt, (v_cam.centerx - v_txt.get_width() // 2, v_cam.top - 16))
+
+            r_cam = self.camera.apply(isl["rod_npc"])
+            pygame.draw.rect(screen, GOLD, r_cam, border_radius=8)
+            pygame.draw.circle(screen, (255, 220, 177), (r_cam.centerx, r_cam.top + 12), 10)
+            r_txt = font_xs.render("VARAS", True, BLACK)
+            screen.blit(r_txt, (r_cam.centerx - r_txt.get_width() // 2, r_cam.top - 16))
+
+            if "boat_npc" in isl:
+                b_cam = self.camera.apply(isl["boat_npc"])
+                pygame.draw.rect(screen, CYAN, b_cam, border_radius=8)
+                pygame.draw.circle(screen, (255, 220, 177), (b_cam.centerx, b_cam.top + 12), 10)
+                b_txt = font_xs.render("BARCOS", True, BLACK)
+                screen.blit(b_txt, (b_cam.centerx - b_txt.get_width() // 2, b_cam.top - 16))
+
+        self.player.draw(screen, self.camera, self)
+
+        for p in self.particles:
+            p.draw(screen, self.camera)
+
+        for ft in self.floating_texts:
+            ft.draw(screen, self.camera)
+
+        if pygame.time.get_ticks() < self.eclipse_msg_timer:
+            msg_str = "Um Ser Divino Subiu a superficie do Oceano"
+            msg_surface = font_title.render(msg_str, True, (255, 30, 30))
+            screen.blit(msg_surface, (SCREEN_WIDTH // 2 - msg_surface.get_width() // 2, 85))
+
+        if self.state == 'EXPLORING':
+            p_rect = self.player.get_rect()
+            
+            if self.current_weather == "Eclipse" and self.eclipse_zone and p_rect.colliderect(self.eclipse_zone):
+                txt = font_medium.render("Pressione [AÇÃO] para Pescar no Feixe Divino do Eclipse!", True, RED)
+                screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 135))
+
+            for isl_key, isl in ISLANDS.items():
+                for lake in isl["lakes"].values():
+                    if p_rect.colliderect(lake["rect"].inflate(20, 20)):
+                        txt = font_medium.render(f"Pressione [AÇÃO] para pescar em {lake['name']}", True, YELLOW)
+                        screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 65))
+
+                if p_rect.colliderect(isl["vendor_npc"].inflate(20, 20)):
+                    txt = font_medium.render("[AÇÃO] Vender Peixes do Inventário", True, GOLD)
+                    screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 65))
+                elif p_rect.colliderect(isl["rod_npc"].inflate(20, 20)):
+                    txt = font_medium.render("[AÇÃO] Abrir Loja de Varas desta Ilha", True, WHITE)
+                    screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 65))
+                elif "boat_npc" in isl and p_rect.colliderect(isl["boat_npc"].inflate(20, 20)):
+                    txt = font_medium.render("[AÇÃO] Abrir Loja de Barcos", True, CYAN)
+                    screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 65))
+
+        elif self.state == 'WAITING_BITES':
+            msg = font_medium.render("Aguardando o peixe fisgar...", True, WHITE)
+            screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 65))
+
+        if self.state == 'MINIGAME':
+            panel_x, panel_y = SCREEN_WIDTH // 2 - 240, SCREEN_HEIGHT // 2 - 120
+            pygame.draw.rect(screen, DARK_GRAY, (panel_x, panel_y, 480, 240), border_radius=12)
+            pygame.draw.rect(screen, WHITE, (panel_x, panel_y, 480, 240), width=3, border_radius=12)
+
+            title_txt = font_large.render("SEGURE [AÇÃO] PARA MANTER!", True, WHITE)
+            screen.blit(title_txt, (SCREEN_WIDTH // 2 - title_txt.get_width() // 2, panel_y + 18))
+
+            track_x = SCREEN_WIDTH // 2 - self.track_width // 2
+            track_y = panel_y + 80
+            pygame.draw.rect(screen, BLACK, (track_x, track_y, self.track_width, 32), border_radius=6)
+
+            rod_data = self.get_rod_data(self.player.equipped_rod)
+            bar_size = rod_data["bar_size"]
+            
+            bar_color = (255, 255, 255)
+            pygame.draw.rect(screen, bar_color, (track_x + self.bar_pos, track_y, bar_size, 32), border_radius=6)
+            
+            if self.current_fish:
+                pygame.draw.circle(screen, self.current_fish["color"], (int(track_x + self.fish_pos), track_y + 16), 12)
+
+            prog_bg = pygame.Rect(track_x, panel_y + 135, self.track_width, 18)
+            prog_fill = pygame.Rect(track_x, panel_y + 135, (self.track_width * self.progress) / 100, 18)
+            pygame.draw.rect(screen, BLACK, prog_bg, border_radius=4)
+            pygame.draw.rect(screen, (52, 152, 219), prog_fill, border_radius=4)
+
+            prog_txt = font_small.render(f"CAPTUROU: {int(self.progress)}%", True, WHITE)
+            screen.blit(prog_txt, (SCREEN_WIDTH // 2 - prog_txt.get_width() // 2, panel_y + 162))
+
+            # Texto da velocidade de progresso reduzida do peixe
+            if self.current_fish:
+                f_rarity = self.current_fish["rarity"]
+                if f_rarity == "Lendário":
+                    reduction_text = "-30% de Velocidade de Progresso"
+                elif f_rarity == "Mítico":
+                    reduction_text = "-60% de Velocidade de Progresso"
+                elif f_rarity == "SECRETO":
+                    reduction_text = "-70% de Velocidade de Progresso"
+                elif f_rarity == "Divina":
+                    reduction_text = "-75% de Velocidade de Progresso"
+                else:
+                    reduction_text = "0% de Velocidade de Progresso"
+
+                red_txt = font_small.render(reduction_text, True, GRAY)
+                screen.blit(red_txt, (SCREEN_WIDTH // 2 - red_txt.get_width() // 2, panel_y + 192))
+
+        if self.state == 'RESULT':
+            res_x, res_y = SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 120
+            pygame.draw.rect(screen, DARK_GRAY, (res_x, res_y, 400, 230), border_radius=12)
+            pygame.draw.rect(screen, WHITE, (res_x, res_y, 400, 230), width=3, border_radius=12)
+
+            if self.caught_fish:
+                head_txt = font_large.render("PEIXE CAPTURADO!", True, GOLD)
+                screen.blit(head_txt, (SCREEN_WIDTH // 2 - head_txt.get_width() // 2, res_y + 15))
+
+                name_txt = font_medium.render(f"{self.caught_fish['name']}", True, WHITE)
+                screen.blit(name_txt, (SCREEN_WIDTH // 2 - name_txt.get_width() // 2, res_y + 45))
+
+                variant_text = ""
+                if self.caught_fish.get("is_shiny") and self.caught_fish.get("is_sparkling"):
+                    variant_text = "[Shiny + Sparkling]"
+                elif self.caught_fish.get("is_shiny"):
+                    variant_text = "[Shiny]"
+                elif self.caught_fish.get("is_sparkling"):
+                    variant_text = "[Sparkling]"
+
+                if variant_text:
+                    var_lbl = font_small.render(variant_text, True, YELLOW)
+                    screen.blit(var_lbl, (SCREEN_WIDTH // 2 - var_lbl.get_width() // 2, res_y + 72))
+
+                rar_txt = font_medium.render(f"Raridade: {self.caught_fish['rarity']}", True, self.caught_fish['color'])
+                screen.blit(rar_txt, (SCREEN_WIDTH // 2 - rar_txt.get_width() // 2, res_y + 98))
+
+                val_txt = font_small.render(f"Valor: C$ {self.caught_fish['price']}  |  Peso: {self.caught_fish['weight']}kg", True, WHITE)
+                screen.blit(val_txt, (SCREEN_WIDTH // 2 - val_txt.get_width() // 2, res_y + 130))
+                
+                if self.perfect_catch:
+                    perf_txt = font_small.render("CAPTURA PERFEITA! (XP x1.5)", True, GREEN)
+                    screen.blit(perf_txt, (SCREEN_WIDTH // 2 - perf_txt.get_width() // 2, res_y + 155))
+            else:
+                fail_txt = font_large.render("O PEIXE ESCAPOU!", True, RED)
+                screen.blit(fail_txt, (SCREEN_WIDTH // 2 - fail_txt.get_width() // 2, res_y + 70))
+
+            cont_txt = font_small.render("Clique ou toque para fechar", True, GRAY)
+            screen.blit(cont_txt, (SCREEN_WIDTH // 2 - cont_txt.get_width() // 2, res_y + 195))
+
+        if self.state == 'SHOP':
+            self.draw_shop()
+
+        if self.state == 'INVENTORY':
+            self.draw_inventory()
+
+        if self.state == 'BESTIARY':
+            self.draw_bestiary()
+
+        self.draw_hud()
+        self.draw_mobile_controls()
+
+        if pygame.time.get_ticks() < self.toast_timer:
+            t_box = pygame.Rect(SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT - 75, 500, 42)
+            pygame.draw.rect(screen, DARK_GRAY, t_box, border_radius=8)
+            pygame.draw.rect(screen, GOLD, t_box, width=2, border_radius=8)
+            t_lbl = font_small.render(self.toast_msg, True, WHITE)
+            screen.blit(t_lbl, (t_box.centerx - t_lbl.get_width() // 2, t_box.centery - t_lbl.get_height() // 2))
+
+        pygame.display.flip()
+
+    def draw_hud(self):
+        pygame.draw.rect(screen, DARK_GRAY, (0, 0, SCREEN_WIDTH, 50))
+        pygame.draw.line(screen, GOLD, (0, 50), (SCREEN_WIDTH, 50), 2)
+
+        lvl_lbl = font_medium.render(f"Nível {self.player.level}", True, CYAN)
+        screen.blit(lvl_lbl, (15, 12))
+
+        xp_w = 120
+        pygame.draw.rect(screen, BLACK, (110, 18, xp_w, 14), border_radius=4)
+        fill_w = min(xp_w, (xp_w * self.player.xp) / self.player.xp_next)
+        pygame.draw.rect(screen, CYAN, (110, 18, fill_w, 14), border_radius=4)
+
+        coin_txt = font_medium.render(f"C$ {self.player.coins}", True, GOLD)
+        screen.blit(coin_txt, (250, 12))
+
+        w_info = WEATHER_TYPES[self.current_weather]
+        w_txt = font_small.render(f"Clima: {w_info['name']} ({w_info['luck_mult']}x)", True, w_info["color"])
+        screen.blit(w_txt, (370, 15))
+
+        rod_data = self.get_rod_data(self.player.equipped_rod)
+        boat_data = BOATS[self.player.equipped_boat]
+        bait_name = BAITS[self.player.equipped_bait]["name"]
+        stock = f"({self.player.baits_stock[self.player.equipped_bait]})" if self.player.equipped_bait != "minhoca" else ""
+        
+        eq_txt = font_xs.render(f"Vara: {rod_data['name']} | Barco: {boat_data['name']} | Isca: {bait_name} {stock}", True, WHITE)
+        screen.blit(eq_txt, (570, 18))
+
+        pygame.draw.rect(screen, (50, 50, 70), self.btn_inv, border_radius=6)
+        pygame.draw.rect(screen, GOLD, self.btn_inv, width=1, border_radius=6)
+        inv_lbl = font_small.render(f"INVENTÁRIO ({len(self.player.inventory)})", True, WHITE)
+        screen.blit(inv_lbl, (self.btn_inv.centerx - inv_lbl.get_width() // 2, self.btn_inv.centery - inv_lbl.get_height() // 2))
+
+        pygame.draw.rect(screen, (50, 50, 70), self.btn_bestiary, border_radius=6)
+        pygame.draw.rect(screen, CYAN, self.btn_bestiary, width=1, border_radius=6)
+        best_lbl = font_small.render("BESTIÁRIO", True, WHITE)
+        screen.blit(best_lbl, (self.btn_bestiary.centerx - best_lbl.get_width() // 2, self.btn_bestiary.centery - best_lbl.get_height() // 2))
+
+    def draw_shop(self):
+        sx, sy = SCREEN_WIDTH // 2 - 280, SCREEN_HEIGHT // 2 - 250
+        pygame.draw.rect(screen, DARK_GRAY, (sx, sy, 560, 500), border_radius=12)
+        pygame.draw.rect(screen, GOLD, (sx, sy, 560, 500), width=3, border_radius=12)
+
+        close_btn = pygame.Rect(sx + 515, sy + 10, 30, 30)
+        pygame.draw.rect(screen, RED, close_btn, border_radius=6)
+        x_lbl = font_medium.render("X", True, WHITE)
+        screen.blit(x_lbl, (close_btn.centerx - x_lbl.get_width() // 2, close_btn.centery - x_lbl.get_height() // 2))
+
+        if self.active_shop_type == 'rod':
+            isl = ISLANDS[self.current_shop_island]
+            title = font_large.render(f"LOJA DE VARAS - {isl['name'].upper()}", True, GOLD)
+            screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, sy + 15))
+
+            y_off = sy + 65
+            for r_key, r_data in isl["rods"].items():
+                box = pygame.Rect(sx + 20, y_off, 520, 40)
+                pygame.draw.rect(screen, (50, 50, 60), box, border_radius=6)
+
+                is_unlocked = r_key in self.player.unlocked_rods
+                is_equipped = self.player.equipped_rod == r_key
+
+                status_str = "EQUIPADA" if is_equipped else ("EQUIPAR" if is_unlocked else f"C$ {r_data['price']}")
+                lbl = font_small.render(f"{r_data['name']} (Res: {r_data['resilience']}) - Sorte: {r_data['luck']}x", True, WHITE)
+                screen.blit(lbl, (sx + 30, y_off + 10))
+
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                btn_col = GOLD if is_equipped else (0, 180, 100) if is_unlocked else (180, 100, 0)
+                pygame.draw.rect(screen, btn_col, btn_b, border_radius=4)
+
+                b_txt = font_small.render(status_str, True, WHITE)
+                screen.blit(b_txt, (btn_b.centerx - b_txt.get_width() // 2, btn_b.centery - b_txt.get_height() // 2))
+
+                y_off += 50
+
+            if "masterline" in self.player.unlocked_rods:
+                box = pygame.Rect(sx + 20, y_off, 520, 40)
+                pygame.draw.rect(screen, (80, 20, 80), box, border_radius=6)
+                lbl = font_small.render("VARA MASTERLINE (Res: 77, 33.3x Sorte)", True, (255, 100, 255))
+                screen.blit(lbl, (sx + 30, y_off + 10))
+
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                is_eq = self.player.equipped_rod == "masterline"
+                btn_col = GOLD if is_eq else PURPLE
+                pygame.draw.rect(screen, btn_col, btn_b, border_radius=4)
+                b_txt = font_small.render("EQUIPADA" if is_eq else "EQUIPAR", True, WHITE)
+                screen.blit(b_txt, (btn_b.centerx - b_txt.get_width() // 2, btn_b.centery - b_txt.get_height() // 2))
+                y_off += 50
+
+            y_off += 10
+            i_title = font_medium.render("ISCAS ESPECIAIS:", True, CYAN)
+            screen.blit(i_title, (sx + 20, y_off))
+            y_off += 30
+
+            for b_key, b_data in BAITS.items():
+                if b_key == "minhoca": continue
+                box = pygame.Rect(sx + 20, y_off, 520, 40)
+                pygame.draw.rect(screen, (50, 50, 60), box, border_radius=6)
+
+                stock = self.player.baits_stock[b_key]
+                lbl = font_small.render(f"{b_data['name']} (+{b_data['pack']}x) - Possui: {stock}", True, WHITE)
+                screen.blit(lbl, (sx + 30, y_off + 10))
+
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 30)
+                pygame.draw.rect(screen, (0, 150, 200), btn_b, border_radius=4)
+                b_txt = font_small.render(f"Comprar C$ {b_data['price']}", True, WHITE)
+                screen.blit(b_txt, (btn_b.centerx - b_txt.get_width() // 2, btn_b.centery - b_txt.get_height() // 2))
+
+                y_off += 50
+
+        elif self.active_shop_type == 'boat':
+            title = font_large.render("LOJA DE BARCOS E NAVEGAÇÃO", True, CYAN)
+            screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, sy + 15))
+
+            y_off = sy + 80
+            for b_key, b_data in BOATS.items():
+                box = pygame.Rect(sx + 20, y_off, 520, 45)
+                pygame.draw.rect(screen, (50, 50, 60), box, border_radius=6)
+
+                is_unlocked = b_key in self.player.unlocked_boats
+                is_equipped = self.player.equipped_boat == b_key
+
+                status_str = "EQUIPADO" if is_equipped else ("USAR" if is_unlocked else f"C$ {b_data['price']}")
+                lbl = font_medium.render(f"{b_data['name']} (Velocidade {b_data['speed_mult']}x)", True, WHITE)
+                screen.blit(lbl, (sx + 30, y_off + 10))
+
+                btn_b = pygame.Rect(sx + 400, y_off + 5, 130, 35)
+                btn_col = GOLD if is_equipped else (0, 180, 100) if is_unlocked else ORANGE
+                pygame.draw.rect(screen, btn_col, btn_b, border_radius=4)
+
+                b_txt = font_small.render(status_str, True, WHITE)
+                screen.blit(b_txt, (btn_b.centerx - b_txt.get_width() // 2, btn_b.centery - b_txt.get_height() // 2))
+
+                y_off += 55
+
+        close_lbl = font_small.render("Pressione [ESC] para sair", True, GRAY)
+        screen.blit(close_lbl, (SCREEN_WIDTH // 2 - close_lbl.get_width() // 2, sy + 470))
+
+    def draw_inventory(self):
+        ix, iy = SCREEN_WIDTH // 2 - 230, SCREEN_HEIGHT // 2 - 200
+        pygame.draw.rect(screen, DARK_GRAY, (ix, iy, 460, 400), border_radius=12)
+        pygame.draw.rect(screen, GOLD, (ix, iy, 460, 400), width=3, border_radius=12)
+
+        close_btn = pygame.Rect(ix + 420, iy + 10, 30, 30)
+        pygame.draw.rect(screen, RED, close_btn, border_radius=6)
+        x_lbl = font_medium.render("X", True, WHITE)
+        screen.blit(x_lbl, (close_btn.centerx - x_lbl.get_width() // 2, close_btn.centery - x_lbl.get_height() // 2))
+
+        title = font_large.render("INVENTÁRIO DE PEIXES", True, GOLD)
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, iy + 18))
+
+        total_val = sum(f['price'] for f in self.player.inventory)
+        info_txt = font_small.render(f"Itens: {len(self.player.inventory)} | Valor Total: C$ {total_val}", True, WHITE)
+        screen.blit(info_txt, (SCREEN_WIDTH // 2 - info_txt.get_width() // 2, iy + 55))
+
+        self.inventory_favorite_buttons.clear()
+
+        start_y = iy + 95
+        if not self.player.inventory:
+            empty_txt = font_medium.render("Nenhum peixe no inventário!", True, GRAY)
+            screen.blit(empty_txt, (SCREEN_WIDTH // 2 - empty_txt.get_width() // 2, start_y + 40))
+        else:
+            max_scroll = max(0, len(self.player.inventory) - 9)
+            self.inventory_scroll = max(0, min(self.inventory_scroll, max_scroll))
+            visible_fish = self.player.inventory[self.inventory_scroll : self.inventory_scroll + 9]
+
+            for fish in visible_fish:
+                variant_suffix = ""
+                is_shiny = fish.get("is_shiny", False)
+                is_sparkling = fish.get("is_sparkling", False)
+                
+                if is_shiny and is_sparkling:
+                    variant_suffix = " [Shiny + Sparkling]"
+                elif is_shiny:
+                    variant_suffix = " [Shiny]"
+                elif is_sparkling:
+                    variant_suffix = " [Sparkling]"
+
+                item_str = f"• {fish['name']}{variant_suffix} ({fish['weight']}kg) C${fish['price']}"
+                lbl = font_xs.render(item_str, True, fish['color'])
+                
+                max_width_allowed = 370
+                if lbl.get_width() > max_width_allowed:
+                    truncated_name = fish['name'][:8] + "..."
+                    item_str = f"• {truncated_name}{variant_suffix} ({fish['weight']}kg) C${fish['price']}"
+                    lbl = font_xs.render(item_str, True, fish['color'])
+
+                screen.blit(lbl, (ix + 25, start_y + 4))
+
+                circle_center_x = ix + 425
+                circle_center_y = start_y + 11
+                circle_radius = 8
+                
+                is_favorited = fish.get("favorited", False)
+                circle_color = YELLOW if is_favorited else (180, 180, 180)
+                
+                pygame.draw.circle(screen, circle_color, (circle_center_x, circle_center_y), circle_radius)
+                pygame.draw.circle(screen, BLACK, (circle_center_x, circle_center_y), circle_radius, 1)
+
+                touch_hitbox = pygame.Rect(circle_center_x - 14, circle_center_y - 14, 28, 28)
+                self.inventory_favorite_buttons.append((fish, touch_hitbox))
+
+                start_y += 28
+
+            if len(self.player.inventory) > 9:
+                scroll_info = font_xs.render(f"Arraste ou use setas/roda ({self.inventory_scroll + 1}/{max_scroll + 1})", True, GRAY)
+                screen.blit(scroll_info, (SCREEN_WIDTH // 2 - scroll_info.get_width() // 2, iy + 342))
+
+        close_txt = font_small.render("Pressione [ESC] para fechar", True, GRAY)
+        screen.blit(close_txt, (SCREEN_WIDTH // 2 - close_txt.get_width() // 2, iy + 365))
+
+    def draw_bestiary(self):
+        bx, by = SCREEN_WIDTH // 2 - 380, SCREEN_HEIGHT // 2 - 230
+        bw, bh = 760, 460
+        pygame.draw.rect(screen, DARK_GRAY, (bx, by, bw, bh), border_radius=12)
+        pygame.draw.rect(screen, CYAN, (bx, by, bw, bh), width=3, border_radius=12)
+
+        close_btn = pygame.Rect(bx + bw - 40, by + 10, 30, 30)
+        pygame.draw.rect(screen, RED, close_btn, border_radius=6)
+        x_lbl = font_medium.render("X", True, WHITE)
+        screen.blit(x_lbl, (close_btn.centerx - x_lbl.get_width() // 2, close_btn.centery - x_lbl.get_height() // 2))
+
+        island_keys = list(ISLANDS.keys())
+        total_pages = len(island_keys) + 1
+        self.bestiary_page = max(0, min(self.bestiary_page, total_pages - 1))
+
+        current_island_key = island_keys[self.bestiary_page] if self.bestiary_page < len(island_keys) else None
+
+        if current_island_key:
+            isl_name = ISLANDS[current_island_key]["name"]
+            title = font_large.render(f"BESTIÁRIO - {isl_name.upper()}", True, CYAN)
+            
+            page_species = []
+            for lk in ISLANDS[current_island_key]["lakes"].values():
+                for r_list in lk["fish"].values():
+                    for fish_name in r_list:
+                        if fish_name not in page_species:
+                            page_species.append(fish_name)
+        else:
+            title = font_large.render("BESTIÁRIO - EVENTO ECLIPSE", True, RED)
+            page_species = ["Eclipse Ancient Serpent"]
+
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, by + 18))
+
+        all_species = sorted(list(get_all_game_species()))
+        count_discovered = len(self.player.bestiary)
+        info_lbl = font_xs.render(f"Total Descoberto: {count_discovered} / {len(all_species)}", True, WHITE)
+        screen.blit(info_lbl, (bx + 25, by + 58))
+
+        start_y = by + 90
+        col_width = bw // 2
+        items_per_column = math.ceil(len(page_species) / 2) if len(page_species) > 0 else 1
+
+        for i, species in enumerate(page_species):
+            col_index = i // items_per_column
+            row_index = i % items_per_column
+
+            col_x = bx + 20 + (col_index * col_width)
+            cy = start_y + (row_index * 26)
+
+            if species in self.player.bestiary:
+                data = self.player.bestiary[species]
+                rarity = data.get('rarity', 'Comum')
+                
+                if rarity not in FISH_RARITY_INFO:
+                    found_rarity = "Comum"
+                    for isl in ISLANDS.values():
+                        for lk in isl["lakes"].values():
+                            for r_name, r_list in lk["fish"].items():
+                                if species in r_list:
+                                    found_rarity = r_name
+                                    break
+                    if species == "Eclipse Ancient Serpent":
+                        found_rarity = "Divina"
+                    rarity = found_rarity
+                
+                rarity_color = FISH_RARITY_INFO.get(rarity, {}).get("color", WHITE)
+                
+                txt_str = f"✔ {species} [{rarity[:3]}] - {data['caught']}x | {data['max_weight']}kg"
+                lbl = font_xs.render(txt_str, True, rarity_color)
+            else:
+                txt_str = f"❓ {species} (Não descoberto)"
+                lbl = font_xs.render(txt_str, True, GRAY)
+            
+            screen.blit(lbl, (col_x, cy))
+
+        btn_prev = pygame.Rect(bx + 20, by + bh - 40, 110, 30)
+        btn_next = pygame.Rect(bx + bw - 130, by + bh - 40, 110, 30)
+        pygame.draw.rect(screen, (60, 60, 80), btn_prev, border_radius=6)
+        pygame.draw.rect(screen, (60, 60, 80), btn_next, border_radius=6)
+
+        p_txt = font_xs.render("◄ Anterior", True, WHITE)
+        n_txt = font_xs.render("Próximo ►", True, WHITE)
+        screen.blit(p_txt, (btn_prev.centerx - p_txt.get_width() // 2, btn_prev.centery - p_txt.get_height() // 2))
+        screen.blit(n_txt, (btn_next.centerx - n_txt.get_width() // 2, btn_next.centery - n_txt.get_height() // 2))
+
+        page_lbl = font_xs.render(f"Página {self.bestiary_page + 1} / {total_pages}", True, WHITE)
+        screen.blit(page_lbl, (SCREEN_WIDTH // 2 - page_lbl.get_width() // 2, by + bh - 32))
+
+    def draw_mobile_controls(self):
+        # Desenha a base do Joystick
+        pygame.draw.circle(screen, DARK_GRAY, self.joystick_center, self.joystick_radius)
+        pygame.draw.circle(screen, GRAY, self.joystick_center, self.joystick_radius, 2)
+        
+        # Desenha a alavanca (handle) do Joystick
+        handle_x = int(self.joystick_pos[0])
+        handle_y = int(self.joystick_pos[1])
+        pygame.draw.circle(screen, WHITE, (handle_x, handle_y), self.joystick_handle_radius)
+        pygame.draw.circle(screen, GOLD, (handle_x, handle_y), self.joystick_handle_radius, 2)
+
+        # Botão de Ação
+        act_c = (211, 84, 0) if self.touch_action else (230, 126, 34)
+        pygame.draw.ellipse(screen, act_c, self.btn_action)
+        pygame.draw.ellipse(screen, WHITE, self.btn_action, width=3)
+        lbl = font_small.render("AÇÃO", True, WHITE)
+        screen.blit(lbl, (self.btn_action.centerx - lbl.get_width() // 2, self.btn_action.centery - lbl.get_height() // 2))
+
+if __name__ == "__main__":
+    game = FischGame()
+    game.run()
